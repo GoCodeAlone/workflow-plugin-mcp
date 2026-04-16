@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 
 	"github.com/GoCodeAlone/modular"
@@ -20,10 +21,11 @@ type HTTPTransportConfig struct {
 // HTTPTransportModule attaches a Streamable-HTTP transport to a ServerModule
 // and implements modular.Module, modular.Startable, and modular.Stoppable.
 type HTTPTransportModule struct {
-	name    string
-	cfg     HTTPTransportConfig
-	server  *ServerModule
-	httpSrv *http.Server
+	name       string
+	cfg        HTTPTransportConfig
+	server     *ServerModule
+	httpSrv    *http.Server
+	boundAddr  string
 }
 
 // Compile-time interface assertions.
@@ -41,6 +43,11 @@ func NewHTTPTransportModule(name string, cfg HTTPTransportConfig, server *Server
 // Name implements modular.Module.
 func (m *HTTPTransportModule) Name() string { return m.name }
 
+// Address returns the address the HTTP server is actually bound to after Start.
+// Before Start it returns an empty string.  Useful when Address is "host:0"
+// and the OS assigns an ephemeral port.
+func (m *HTTPTransportModule) Address() string { return m.boundAddr }
+
 // Init implements modular.Module.  It validates the wired ServerModule and
 // configuration.
 // app may be nil; service-registry wiring is deferred to Task 2.5.
@@ -54,8 +61,9 @@ func (m *HTTPTransportModule) Init(_ modular.Application) error {
 	return nil
 }
 
-// Start implements modular.Startable.  It builds a StreamableHTTPHandler,
-// wraps it in an http.Server, and calls ListenAndServe in a goroutine.
+// Start implements modular.Startable.  It binds the listener synchronously so
+// that bind failures (port in use, permission denied) are returned immediately.
+// The HTTP server is then served in a background goroutine.
 // http.ErrServerClosed is swallowed because it is the expected termination
 // signal from Stop.
 func (m *HTTPTransportModule) Start(_ context.Context) error {
@@ -63,16 +71,17 @@ func (m *HTTPTransportModule) Start(_ context.Context) error {
 		return m.server.Server()
 	}, nil)
 
-	m.httpSrv = &http.Server{
-		Addr:    m.cfg.Address,
-		Handler: handler,
+	ln, err := net.Listen("tcp", m.cfg.Address)
+	if err != nil {
+		return fmt.Errorf("http_transport %q: listen on %s: %w", m.name, m.cfg.Address, err)
 	}
+	m.boundAddr = ln.Addr().String()
+	m.httpSrv = &http.Server{Handler: handler}
 
 	go func() {
-		if err := m.httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			// Non-critical: the transport is best-effort; callers observe
-			// connection-refused on the address if binding failed.
-			_ = err
+		if err := m.httpSrv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			// Serve errors after bind are logged but can't be returned; they
+			// most often mean the listener was closed out from under us.
 		}
 	}()
 

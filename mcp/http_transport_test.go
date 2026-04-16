@@ -2,7 +2,6 @@ package mcp_test
 
 import (
 	"context"
-	"net"
 	"net/http"
 	"testing"
 	"time"
@@ -20,20 +19,6 @@ func newInitedServerModule(t *testing.T) *mcp.ServerModule {
 		t.Fatalf("ServerModule.Init: %v", err)
 	}
 	return srv
-}
-
-// freeAddr probes the OS for a free TCP port by briefly binding, records the
-// address, then closes the listener.  There is a small TOCTOU window but it
-// is acceptable for tests on a loopback interface.
-func freeAddr(t *testing.T) string {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("net.Listen: %v", err)
-	}
-	addr := ln.Addr().String()
-	ln.Close()
-	return addr
 }
 
 func TestHTTPTransportModule_InitValidatesConfig(t *testing.T) {
@@ -71,11 +56,13 @@ func TestHTTPTransportModule_InitValidatesConfig(t *testing.T) {
 	})
 }
 
+// TestHTTPTransportModule_StartAndStop uses address "127.0.0.1:0" so the OS
+// picks a free ephemeral port.  Start binds synchronously and Address() returns
+// the actual bound address — no TOCTOU probe-close-reuse window.
 func TestHTTPTransportModule_StartAndStop(t *testing.T) {
-	addr := freeAddr(t)
 	srv := newInitedServerModule(t)
 
-	m := mcp.NewHTTPTransportModule("http", mcp.HTTPTransportConfig{Address: addr}, srv)
+	m := mcp.NewHTTPTransportModule("http", mcp.HTTPTransportConfig{Address: "127.0.0.1:0"}, srv)
 	if err := m.Init(nil); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
@@ -84,8 +71,14 @@ func TestHTTPTransportModule_StartAndStop(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 
-	// Poll until the server is reachable (allow up to 1 s for ListenAndServe to bind).
-	url := "http://" + addr + "/"
+	boundAddr := m.Address()
+	if boundAddr == "" {
+		t.Fatal("Address() returned empty string after Start")
+	}
+
+	// The listener is already bound; the server must be reachable immediately.
+	// We still retry briefly to let the goroutine call Serve.
+	url := "http://" + boundAddr + "/"
 	deadline := time.Now().Add(time.Second)
 	var lastErr error
 	for time.Now().Before(deadline) {
@@ -96,7 +89,7 @@ func TestHTTPTransportModule_StartAndStop(t *testing.T) {
 			break
 		}
 		lastErr = err
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(5 * time.Millisecond)
 	}
 	if lastErr != nil {
 		t.Fatalf("server did not become reachable within 1s: %v", lastErr)
@@ -107,5 +100,34 @@ func TestHTTPTransportModule_StartAndStop(t *testing.T) {
 	defer cancel()
 	if err := m.Stop(stopCtx); err != nil {
 		t.Fatalf("Stop: %v", err)
+	}
+}
+
+// TestHTTPTransportModule_StartBindError verifies that Start returns an error
+// immediately when the address is already in use.
+func TestHTTPTransportModule_StartBindError(t *testing.T) {
+	// Start a first module to occupy the port.
+	srv1 := newInitedServerModule(t)
+	m1 := mcp.NewHTTPTransportModule("http1", mcp.HTTPTransportConfig{Address: "127.0.0.1:0"}, srv1)
+	if err := m1.Init(nil); err != nil {
+		t.Fatalf("m1.Init: %v", err)
+	}
+	if err := m1.Start(context.Background()); err != nil {
+		t.Fatalf("m1.Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = m1.Stop(ctx)
+	})
+
+	// Try to bind the same address — must fail synchronously.
+	srv2 := newInitedServerModule(t)
+	m2 := mcp.NewHTTPTransportModule("http2", mcp.HTTPTransportConfig{Address: m1.Address()}, srv2)
+	if err := m2.Init(nil); err != nil {
+		t.Fatalf("m2.Init: %v", err)
+	}
+	if err := m2.Start(context.Background()); err == nil {
+		t.Fatal("expected Start to return an error for already-bound address, got nil")
 	}
 }
