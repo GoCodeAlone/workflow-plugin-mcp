@@ -25,6 +25,8 @@ type ServerModule struct {
 	server *mcpsdk.Server
 }
 
+var _ modular.Module = (*ServerModule)(nil)
+
 // NewServerModule constructs a ServerModule with the given logical name and config.
 func NewServerModule(name string, cfg ServerConfig) *ServerModule {
 	return &ServerModule{name: name, cfg: cfg}

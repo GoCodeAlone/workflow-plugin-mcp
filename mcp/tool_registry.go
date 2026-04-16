@@ -3,6 +3,7 @@ package mcp
 import (
 	"sync"
 
+	"github.com/GoCodeAlone/modular"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -21,6 +22,8 @@ type ToolRegistry struct {
 	tools []RegisteredTool
 }
 
+var _ modular.Module = (*ToolRegistry)(nil)
+
 // NewToolRegistry creates an empty ToolRegistry with the given module name.
 func NewToolRegistry(name string) *ToolRegistry {
 	return &ToolRegistry{name: name}
@@ -30,7 +33,7 @@ func NewToolRegistry(name string) *ToolRegistry {
 func (r *ToolRegistry) Name() string { return r.name }
 
 // Init implements modular.Module (no-op; no application wiring required here).
-func (r *ToolRegistry) Init(_ interface{}) error { return nil }
+func (r *ToolRegistry) Init(_ modular.Application) error { return nil }
 
 // Add appends a tool and its handler to the registry. Safe for concurrent use.
 func (r *ToolRegistry) Add(tool *mcpsdk.Tool, h mcpsdk.ToolHandler) {
