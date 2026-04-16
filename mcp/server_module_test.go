@@ -28,7 +28,7 @@ func TestServerModule_InitCreatesServer(t *testing.T) {
 	}
 }
 
-func TestServerModule_RequiresImplementationName(t *testing.T) {
+func TestServerModule_RequiresNonEmptyImplementation(t *testing.T) {
 	cfg := mcp.ServerConfig{
 		Implementation: mcp.Implementation{
 			Name:    "",

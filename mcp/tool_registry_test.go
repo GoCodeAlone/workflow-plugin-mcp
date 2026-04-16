@@ -12,7 +12,7 @@ import (
 )
 
 func TestToolRegistry_AddAndAll(t *testing.T) {
-	reg := mcp.NewToolRegistry()
+	reg := mcp.NewToolRegistry("mcp.tool-registry")
 
 	handler := func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 		return nil, nil
@@ -37,7 +37,7 @@ func TestToolRegistry_AddAndAll(t *testing.T) {
 }
 
 func TestToolRegistry_AllReturnsCopy(t *testing.T) {
-	reg := mcp.NewToolRegistry()
+	reg := mcp.NewToolRegistry("mcp.tool-registry")
 
 	handler := func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 		return nil, nil
@@ -63,7 +63,7 @@ func TestToolRegistry_ConcurrentAdd(t *testing.T) {
 	const goroutines = 10
 	const toolsPerGoroutine = 20
 
-	reg := mcp.NewToolRegistry()
+	reg := mcp.NewToolRegistry("mcp.tool-registry")
 	handler := func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 		return nil, nil
 	}
@@ -85,5 +85,12 @@ func TestToolRegistry_ConcurrentAdd(t *testing.T) {
 	want := goroutines * toolsPerGoroutine
 	if len(all) != want {
 		t.Errorf("expected %d tools after concurrent adds, got %d", want, len(all))
+	}
+}
+
+func TestToolRegistry_UsesConstructorName(t *testing.T) {
+	r := mcp.NewToolRegistry("custom-name")
+	if got := r.Name(); got != "custom-name" {
+		t.Errorf("Name() = %q, want %q", got, "custom-name")
 	}
 }

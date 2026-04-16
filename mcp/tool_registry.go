@@ -16,17 +16,18 @@ type RegisteredTool struct {
 // ServerModule. It is intentionally a separate module so that plugins can
 // contribute tools without importing ServerModule directly.
 type ToolRegistry struct {
+	name  string
 	mu    sync.Mutex
 	tools []RegisteredTool
 }
 
-// NewToolRegistry creates an empty ToolRegistry.
-func NewToolRegistry() *ToolRegistry {
-	return &ToolRegistry{}
+// NewToolRegistry creates an empty ToolRegistry with the given module name.
+func NewToolRegistry(name string) *ToolRegistry {
+	return &ToolRegistry{name: name}
 }
 
 // Name implements modular.Module.
-func (r *ToolRegistry) Name() string { return "mcp-tool-registry" }
+func (r *ToolRegistry) Name() string { return r.name }
 
 // Init implements modular.Module (no-op; no application wiring required here).
 func (r *ToolRegistry) Init(_ interface{}) error { return nil }
