@@ -3,7 +3,7 @@ package internal_test
 import (
 	"testing"
 
-	"github.com/GoCodeAlone/workflow-plugin-TEMPLATE/internal"
+	"github.com/GoCodeAlone/workflow-plugin-mcp/internal"
 	sdk "github.com/GoCodeAlone/workflow/plugin/external/sdk"
 )
 

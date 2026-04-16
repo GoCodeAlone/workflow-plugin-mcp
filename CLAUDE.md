@@ -12,12 +12,12 @@ go test ./... -v -race -count=1
 ## Cross-compile for deployment
 
 ```sh
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o workflow-plugin-TEMPLATE ./cmd/workflow-plugin-TEMPLATE/
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o workflow-plugin-mcp ./cmd/workflow-plugin-mcp/
 ```
 
 ## Structure
 
-- `cmd/workflow-plugin-TEMPLATE/main.go` — Plugin entry point (calls `sdk.Serve`)
+- `cmd/workflow-plugin-mcp/main.go` — Plugin entry point (calls `sdk.Serve`)
 - `internal/plugin.go` — Plugin manifest, module factories, step factories
 - `internal/` — All module and step implementations
 - `plugin.json` — Capability manifest for the workflow registry
@@ -27,15 +27,15 @@ GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o workflow-plug
 
 ## Adding a Module Type
 
-1. Create `internal/module_example.go` implementing the module
-2. Register in `internal/plugin.go` ModuleFactories()
+1. Create `internal/module_example.go` implementing `sdk.ModuleInstance`
+2. Implement `sdk.ModuleProvider` on the plugin (`ModuleTypes()`, `CreateModule()`)
 3. Add to `plugin.json` capabilities.moduleTypes
 4. Add tests in `internal/module_example_test.go`
 
 ## Adding a Step Type
 
-1. Create `internal/step_example.go` implementing the step
-2. Register in `internal/plugin.go` StepFactories()
+1. Create `internal/step_example.go` implementing `sdk.StepInstance`
+2. Implement `sdk.StepProvider` on the plugin (`StepTypes()`, `CreateStep()`)
 3. Add to `plugin.json` capabilities.stepTypes
 4. Add tests in `internal/step_example_test.go`
 
