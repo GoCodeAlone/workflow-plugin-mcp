@@ -15,11 +15,16 @@ import (
 // eagerly at construction time (inside CreateTrigger). If Configure fails, the
 // error is surfaced immediately so the host sees it before attempting Start.
 //
-// The sdk.TriggerCallback is stored for future use but is not wired in v0.1.0;
-// the in-process pipeline executor handles dispatch.
+// The sdk.TriggerCallback cb is the SDK's intended bridge for a gRPC trigger
+// to dispatch actions on the host engine. In v0.1.0 it is stored but not wired:
+// ToolTrigger.Configure captures the pre-seeded noopPipelineExecutor via its
+// handler closure, so tool calls surface a "not available in gRPC mode" error
+// at call time. A future v0.2.0 change should build a cb-backed executor shim
+// that marshals the pipeline name + args back to the host via cb, replacing
+// the noop executor before Configure runs.
 type triggerAdapter struct {
 	trigger *mcp.ToolTrigger
-	cb      sdk.TriggerCallback // unused in v0.1.0, stored for future wiring
+	cb      sdk.TriggerCallback // v0.2.0: wire to a cb-backed executor (see type doc)
 }
 
 // newTriggerAdapter configures t eagerly and returns an sdk.TriggerInstance.

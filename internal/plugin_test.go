@@ -127,3 +127,24 @@ func TestCreateTrigger_MCPTool_MinimalConfig(t *testing.T) {
 	}
 	var _ sdk.TriggerInstance = inst
 }
+
+// TestCreateTrigger_MissingWorkflowType_ReturnsError verifies that a config
+// lacking the workflowType key fails fast in CreateTrigger rather than
+// producing a silently-broken trigger.
+func TestCreateTrigger_MissingWorkflowType_ReturnsError(t *testing.T) {
+	tp := internal.NewPlugin().(sdk.TriggerProvider)
+	cfg := map[string]any{
+		"name":        "test-tool",
+		"description": "A test MCP tool",
+		// no workflowType
+	}
+	if _, err := tp.CreateTrigger("mcp.tool", cfg, nil); err == nil {
+		t.Fatal("expected CreateTrigger to fail when workflowType is missing")
+	}
+}
+
+// Post-Configure registry persistence is not probed here: each CreateTrigger
+// constructs a fresh *mcp.ToolTrigger whose per-instance duplicate-name guard
+// does not trip across triggers, and the plugin's pre-seeded app is
+// intentionally not exported. Registration is exercised end-to-end in
+// mcp/lifecycle_test.go, which is the correct layer for that assertion.

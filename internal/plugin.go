@@ -44,15 +44,23 @@ var _ sdk.TriggerProvider = (*plugin)(nil)
 //   - A no-op PipelineExecutor so that Configure can resolve the executor.
 //     Actual pipeline dispatch is not available in gRPC mode (v0.1.0 limitation).
 func NewPlugin() sdk.PluginProvider {
+	// nil config provider + nil logger: intentional. The gRPC subprocess has
+	// no host config to read and no Logger service to share. Any module added
+	// here that reads "logger" from the service registry will find nil — take
+	// care when introducing new module types.
 	app := modular.NewStdApplication(nil, nil)
 
 	// Pre-seed a default ToolRegistry so triggers can register tools.
 	defaultRegistry := mcp.NewToolRegistry("mcp.tool-registry")
-	_ = app.RegisterService("mcp.tool-registry", defaultRegistry)
+	if err := app.RegisterService("mcp.tool-registry", defaultRegistry); err != nil {
+		panic(fmt.Sprintf("mcp: failed to register default ToolRegistry in fresh app: %v", err))
+	}
 
 	// Pre-seed a no-op executor so Configure doesn't fail on the executor
 	// lookup. Calls through this executor return a descriptive error.
-	_ = app.RegisterService("_noop_pipeline_executor", interfaces.PipelineExecutor(noopPipelineExecutor{}))
+	if err := app.RegisterService("_noop_pipeline_executor", interfaces.PipelineExecutor(noopPipelineExecutor{})); err != nil {
+		panic(fmt.Sprintf("mcp: failed to register noop executor in fresh app: %v", err))
+	}
 
 	return &plugin{app: app}
 }
