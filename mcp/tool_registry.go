@@ -23,6 +23,7 @@ type ToolRegistry struct {
 }
 
 var _ modular.Module = (*ToolRegistry)(nil)
+var _ modular.ServiceAware = (*ToolRegistry)(nil)
 
 // NewToolRegistry creates an empty ToolRegistry with the given module name.
 func NewToolRegistry(name string) *ToolRegistry {
@@ -32,8 +33,19 @@ func NewToolRegistry(name string) *ToolRegistry {
 // Name implements modular.Module.
 func (r *ToolRegistry) Name() string { return r.name }
 
-// Init implements modular.Module (no-op; no application wiring required here).
+// Init implements modular.Module (no-op; service registration is via ProvidesServices).
 func (r *ToolRegistry) Init(_ modular.Application) error { return nil }
+
+// ProvidesServices implements modular.ServiceAware. It registers the registry
+// itself under its module name so ServerModule and ToolTrigger can look it up.
+func (r *ToolRegistry) ProvidesServices() []modular.ServiceProvider {
+	return []modular.ServiceProvider{
+		{Name: r.name, Instance: r},
+	}
+}
+
+// RequiresServices implements modular.ServiceAware (no requirements).
+func (r *ToolRegistry) RequiresServices() []modular.ServiceDependency { return nil }
 
 // Add appends a tool and its handler to the registry. Safe for concurrent use.
 func (r *ToolRegistry) Add(tool *mcpsdk.Tool, h mcpsdk.ToolHandler) {

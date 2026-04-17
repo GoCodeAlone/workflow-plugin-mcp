@@ -23,6 +23,7 @@ type HTTPTransportConfig struct {
 type HTTPTransportModule struct {
 	name       string
 	cfg        HTTPTransportConfig
+	serverName string // used when server is resolved via app at Init time
 	server     *ServerModule
 	httpSrv    *http.Server
 	boundAddr  string
@@ -33,11 +34,18 @@ var _ modular.Module = (*HTTPTransportModule)(nil)
 var _ modular.Startable = (*HTTPTransportModule)(nil)
 var _ modular.Stoppable = (*HTTPTransportModule)(nil)
 
-// NewHTTPTransportModule constructs an HTTPTransportModule.
-// server must be non-nil and its Init must have been called before this
-// module's Init is invoked.
+// NewHTTPTransportModule constructs an HTTPTransportModule with a direct
+// ServerModule reference. server must be non-nil and its Init must have been
+// called before this module's Init is invoked.
 func NewHTTPTransportModule(name string, cfg HTTPTransportConfig, server *ServerModule) *HTTPTransportModule {
 	return &HTTPTransportModule{name: name, cfg: cfg, server: server}
+}
+
+// NewHTTPTransportModuleByName constructs an HTTPTransportModule that
+// resolves its ServerModule from the application registry during Init.
+// This is the factory-friendly constructor used by MCPPlugin.
+func NewHTTPTransportModuleByName(name string, cfg HTTPTransportConfig, serverName string) *HTTPTransportModule {
+	return &HTTPTransportModule{name: name, cfg: cfg, serverName: serverName}
 }
 
 // Name implements modular.Module.
@@ -48,15 +56,36 @@ func (m *HTTPTransportModule) Name() string { return m.name }
 // and the OS assigns an ephemeral port.
 func (m *HTTPTransportModule) Address() string { return m.boundAddr }
 
-// Init implements modular.Module.  It validates the wired ServerModule and
-// configuration.
-// app may be nil; service-registry wiring is deferred to Task 2.5.
-func (m *HTTPTransportModule) Init(_ modular.Application) error {
+// Init implements modular.Module.  If constructed via NewHTTPTransportModuleByName,
+// it resolves the ServerModule from the application registry; otherwise it
+// validates the directly wired ServerModule has been initialised.
+func (m *HTTPTransportModule) Init(app modular.Application) error {
+	if m.server == nil && m.serverName != "" && app != nil {
+		mod := app.GetModule(m.serverName)
+		if mod == nil {
+			return fmt.Errorf("mcp: http_transport %q: server module %q not found", m.name, m.serverName)
+		}
+		srv, ok := mod.(*ServerModule)
+		if !ok {
+			return fmt.Errorf("mcp: http_transport %q: module %q is not a *ServerModule", m.name, m.serverName)
+		}
+		m.server = srv
+	}
 	if m.server == nil || m.server.Server() == nil {
 		return fmt.Errorf("mcp: http_transport %q: server not wired or not initialised", m.name)
 	}
 	if m.cfg.Address == "" {
 		return fmt.Errorf("mcp: http_transport %q: address is required", m.name)
+	}
+	return nil
+}
+
+// Dependencies implements modular.DependencyAware.  When constructed via
+// NewHTTPTransportModuleByName the transport declares the server as a
+// dependency so the modular framework initialises and starts it first.
+func (m *HTTPTransportModule) Dependencies() []string {
+	if m.serverName != "" {
+		return []string{m.serverName}
 	}
 	return nil
 }
