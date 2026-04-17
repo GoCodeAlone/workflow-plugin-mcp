@@ -34,6 +34,11 @@ modules:
         name: test-server
         version: "1.0"
       registry: mcp.tool-registry
+  - name: my-http-transport
+    type: mcp.http_transport
+    config:
+      server: my-server
+      address: "127.0.0.1:0"
 
 pipelines:
   greet:
@@ -116,5 +121,21 @@ func TestLifecycle_ToolsRegisteredBeforeTransportStarts(t *testing.T) {
 		if !want[n] {
 			t.Errorf("unexpected tool name %q", n)
 		}
+	}
+
+	// The http transport module was started as part of the same engine.Start
+	// call above. Resolve it and verify it bound to a port, which proves the
+	// transport's Start ran after the server's Start (else the transport would
+	// either fail or the server would still be empty).
+	tMod := app.GetModule("my-http-transport")
+	if tMod == nil {
+		t.Fatal("module 'my-http-transport' not found after Start")
+	}
+	httpMod, ok := tMod.(*mcp.HTTPTransportModule)
+	if !ok {
+		t.Fatalf("module 'my-http-transport' is %T, want *mcp.HTTPTransportModule", tMod)
+	}
+	if httpMod.Address() == "" {
+		t.Error("HTTPTransportModule.Address() is empty; transport did not bind")
 	}
 }

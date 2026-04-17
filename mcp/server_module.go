@@ -54,25 +54,31 @@ func (m *ServerModule) Init(app modular.Application) error {
 	return nil
 }
 
+// registryName returns the effective registry module name, applying the
+// default when none was configured.
+func (m *ServerModule) registryName() string {
+	if m.cfg.RegistryModuleName != "" {
+		return m.cfg.RegistryModuleName
+	}
+	return defaultRegistryModuleName
+}
+
 // Start implements modular.Startable. It resolves the ToolRegistry from the
 // application service registry and replays all registered tools onto the
 // underlying MCP server. Transports must start after ServerModule (declared
 // via Dependencies()) so the server is fully equipped before serving begins.
 func (m *ServerModule) Start(_ context.Context) error {
 	if m.app == nil {
-		return nil // no app (unit test with nil); nothing to replay
+		return fmt.Errorf("mcp: server %q: Start called before Init", m.name)
 	}
-	registryName := m.cfg.RegistryModuleName
-	if registryName == "" {
-		registryName = "mcp.tool-registry"
-	}
-	svc, ok := m.app.SvcRegistry()[registryName]
+	regName := m.registryName()
+	svc, ok := m.app.SvcRegistry()[regName]
 	if !ok {
-		return fmt.Errorf("mcp: server %q: ToolRegistry %q not found in service registry", m.name, registryName)
+		return fmt.Errorf("mcp: server %q: ToolRegistry %q not found in service registry", m.name, regName)
 	}
 	reg, ok := svc.(*ToolRegistry)
 	if !ok {
-		return fmt.Errorf("mcp: server %q: service %q is not a *ToolRegistry (got %T)", m.name, registryName, svc)
+		return fmt.Errorf("mcp: server %q: service %q is not a *ToolRegistry (got %T)", m.name, regName, svc)
 	}
 	for _, rt := range reg.All() {
 		m.server.AddTool(rt.Tool, rt.Handler)
@@ -87,16 +93,12 @@ func (m *ServerModule) Server() *mcpsdk.Server { return m.server }
 // ToolNames returns the names of all tools currently registered on the
 // underlying MCP server. It proxies through the ToolRegistry rather than
 // the SDK internals to remain SDK-version agnostic.
-// Returns nil if Start has not yet been called or the app was nil.
+// Returns nil if Init has not yet been called.
 func (m *ServerModule) ToolNames() []string {
 	if m.app == nil {
 		return nil
 	}
-	registryName := m.cfg.RegistryModuleName
-	if registryName == "" {
-		registryName = "mcp.tool-registry"
-	}
-	svc, ok := m.app.SvcRegistry()[registryName]
+	svc, ok := m.app.SvcRegistry()[m.registryName()]
 	if !ok {
 		return nil
 	}
