@@ -66,8 +66,14 @@ type ToolTrigger struct {
 	// name is the modular module name for this trigger instance.
 	name string
 
+	// serverModuleName is captured from the last Configure call for Task 2.5
+	// wiring, where the ServerModule replays ToolRegistry entries onto itself
+	// during Start. Not used today.
+	serverModuleName string
+
 	// tools is a map from tool name to the pipeline/schema metadata stashed on
-	// Configure. Primarily useful for observability and testing.
+	// Configure. Primarily useful for observability and testing; also used to
+	// reject duplicate tool-name registration.
 	tools map[string]*registeredPipelineTool
 
 	// executor is resolved from the service registry on first Configure call.
@@ -146,6 +152,9 @@ func (t *ToolTrigger) Configure(app modular.Application, triggerConfig any) erro
 	if toolName == "" {
 		return fmt.Errorf("mcp.tool trigger: 'name' (tool name) is required")
 	}
+	if existing, ok := t.tools[toolName]; ok {
+		return fmt.Errorf("mcp.tool trigger: tool name %q already registered (for pipeline %q)", toolName, existing.pipelineName)
+	}
 	description := stringVal(cfg, "description")
 	configDir := stringVal(cfg, "config_dir")
 
@@ -195,7 +204,7 @@ func (t *ToolTrigger) Configure(app modular.Application, triggerConfig any) erro
 	registry.Add(tool, handler)
 
 	// --- 9. Stash for observability / testing ---
-	_ = serverName // recorded for Task 2.5 wiring; unused here
+	t.serverModuleName = serverName
 	t.tools[toolName] = &registeredPipelineTool{
 		pipelineName: pipelineName,
 		schema:       compiledSchema,
@@ -289,8 +298,10 @@ func (t *ToolTrigger) resolveRegistry(app modular.Application, name string) (*To
 }
 
 // resolveExecutor looks up interfaces.PipelineExecutor in the service registry.
+// The engine registers exactly one executor per application, so first-found
+// iteration is safe and matches the upstream convention in
+// workflow/module/trigger_mcp_tool.go.
 func (t *ToolTrigger) resolveExecutor(app modular.Application) (interfaces.PipelineExecutor, error) {
-	// Iterate the registry looking for a PipelineExecutor (name-independent).
 	for _, svc := range app.SvcRegistry() {
 		if exec, ok := svc.(interfaces.PipelineExecutor); ok {
 			t.executor = exec

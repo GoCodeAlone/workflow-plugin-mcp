@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -14,6 +15,8 @@ import (
 
 	"github.com/GoCodeAlone/workflow-plugin-mcp/mcp"
 )
+
+var errDispatch = errors.New("pipeline dispatch failed")
 
 // -----------------------------------------------------------------------------
 // Test helpers / fakes
@@ -282,6 +285,57 @@ func TestToolTrigger_ResolvesSchemaRefFromConfigDir(t *testing.T) {
 	}
 }
 
+// TestToolTrigger_DispatchFailureReturnsIsError verifies that a pipeline
+// dispatch error surfaces as IsError:true rather than a Go error.
+func TestToolTrigger_DispatchFailureReturnsIsError(t *testing.T) {
+	exec := &mockExecutor{err: errDispatch}
+	app, reg := setupStandardApp(t, exec)
+
+	trigger := mcp.NewToolTrigger()
+	cfg := baseTriggerConfig(map[string]any{"input_schema": objectSchema})
+	if err := trigger.Configure(app, cfg); err != nil {
+		t.Fatalf("Configure: %v", err)
+	}
+
+	handler := reg.All()[0].Handler
+	req := &mcpsdk.CallToolRequest{}
+	req.Params = &mcpsdk.CallToolParamsRaw{
+		Name:      "test-tool",
+		Arguments: json.RawMessage(`{}`),
+	}
+	result, err := handler(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected handler error: %v (should be wrapped into IsError)", err)
+	}
+	if !result.IsError {
+		t.Error("expected IsError=true when pipeline dispatch fails")
+	}
+	if exec.callCount != 1 {
+		t.Errorf("executor called %d times; want 1", exec.callCount)
+	}
+}
+
+// TestToolTrigger_RejectsDuplicateToolName verifies that a second Configure
+// with the same tool name returns an error rather than silently overwriting.
+func TestToolTrigger_RejectsDuplicateToolName(t *testing.T) {
+	exec := &mockExecutor{}
+	app, _ := setupStandardApp(t, exec)
+
+	trigger := mcp.NewToolTrigger()
+	cfg := baseTriggerConfig(map[string]any{"input_schema": objectSchema})
+	if err := trigger.Configure(app, cfg); err != nil {
+		t.Fatalf("first Configure: %v", err)
+	}
+	// Second configure — same tool name, different pipeline.
+	cfg2 := baseTriggerConfig(map[string]any{
+		"input_schema": objectSchema,
+		"workflowType": "pipeline:other-pipeline",
+	})
+	if err := trigger.Configure(app, cfg2); err == nil {
+		t.Fatal("expected error for duplicate tool name, got nil")
+	}
+}
+
 // TestToolTrigger_RejectsNonObjectTopLevelSchema verifies that Configure
 // returns an error when the input schema top-level type is not "object".
 func TestToolTrigger_RejectsNonObjectTopLevelSchema(t *testing.T) {
@@ -321,6 +375,29 @@ func TestToolTrigger_RejectsWhenServerOrRegistryOrExecutorMissing(t *testing.T) 
 		cfg := baseTriggerConfig(map[string]any{"input_schema": objectSchema})
 		if err := trigger.Configure(app, cfg); err == nil {
 			t.Fatal("expected error for missing executor, got nil")
+		}
+	})
+
+	t.Run("missing workflowType", func(t *testing.T) {
+		exec := &mockExecutor{}
+		app, _ := setupStandardApp(t, exec)
+
+		trigger := mcp.NewToolTrigger()
+		cfg := baseTriggerConfig(nil)
+		delete(cfg, "workflowType")
+		if err := trigger.Configure(app, cfg); err == nil {
+			t.Fatal("expected error for missing workflowType, got nil")
+		}
+	})
+
+	t.Run("malformed workflowType", func(t *testing.T) {
+		exec := &mockExecutor{}
+		app, _ := setupStandardApp(t, exec)
+
+		trigger := mcp.NewToolTrigger()
+		cfg := baseTriggerConfig(map[string]any{"workflowType": "not-a-pipeline"})
+		if err := trigger.Configure(app, cfg); err == nil {
+			t.Fatal("expected error for workflowType without 'pipeline:' prefix, got nil")
 		}
 	})
 
