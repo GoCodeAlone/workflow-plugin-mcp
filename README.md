@@ -1,5 +1,7 @@
 # workflow-plugin-mcp
 
+> ⚠️ **Experimental** — This plugin compiles and passes its unit tests but has not been validated in any active GoCodeAlone-internal production deployment. Use with caution. Please [open an issue](https://github.com/GoCodeAlone/workflow-plugin-mcp/issues/new) if you adopt it so we can promote it to **verified** status.
+
 Model Context Protocol (MCP) plugin for the [GoCodeAlone/workflow](https://github.com/GoCodeAlone/workflow) engine. Exposes workflow pipelines as MCP tools that an LLM can call, via stdio or streamable HTTP transport.
 
 Two consumption modes are supported:
