@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/GoCodeAlone/modular v1.13.0
-	github.com/GoCodeAlone/workflow v0.62.0
+	github.com/GoCodeAlone/workflow v0.64.0
 	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 )
